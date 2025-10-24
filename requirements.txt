@@ -1,0 +1,13 @@
+flask
+gunicorn
+python-dotenv
+yt-dlp
+faster-whisper
+langchain
+google-generativeai
+langchain-google-genai
+tenacity
+jinja2
+werkzeug
+itsdangerous
+pydantic>=2
