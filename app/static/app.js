@@ -50,7 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   function extractId(url) {
-    const m = String(url).match(/[?&]v=([^&]+)/) || String(url).match(/youtu\\.be\\/([^?]+)/);
+    const m = String(url).match(/[?&]v=([^&]+)/) || String(url).match(/youtu\\.be\/([^?]+)/);
     return m ? m[1] : "";
   }
 });

@@ -1,7 +1,6 @@
 import os
 from typing import List
-from langchain_core.prompts import PromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
+import google.generativeai as genai
 
 def chunk_text(text: str, max_chars: int = 8000) -> List[str]:
     chunks = []
@@ -24,22 +23,49 @@ def summarize_transcript(transcript: str, length: str = "medium", style: str = "
 
     model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
     max_tokens = int(os.getenv("SUMMARIZE_MAX_TOKENS", "2048"))
+    temperature = 0.3
 
-    llm = ChatGoogleGenerativeAI(
-        model=model_name,
-        google_api_key=api_key,
-        temperature=0.3,
-        max_output_tokens=max_tokens,
-    )
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel(model_name)
 
-    map_prompt = PromptTemplate.from_template(
-        "You are a precise analyst. Summarize the following transcript chunk "
-        "into crisp bullet points with only the essential facts and topics. "
-        "Avoid hallucinations. If timestamps appear, keep them.\n\n"
-        "Transcript chunk:\n{chunk}"
-    )
+    # For shorter transcripts, do single-shot
+    if len(transcript) < 8000:
+        prompt = (
+            "Summarize the following transcript. Style: "
+            f"{'bullets' if style=='bullets' else 'narrative'}, Length: {length}. "
+            "Include Executive summary, Detailed summary, Key takeaways, and optional Action items.\n\n"
+            f"{transcript}"
+        )
+        resp = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": temperature,
+                "max_output_tokens": max_tokens,
+            },
+        )
+        return (resp.text or "").strip()
 
-    reduce_prompt = PromptTemplate.from_template(
+    # Map-reduce for longer inputs
+    chunks = chunk_text(transcript, 8000)
+    mapped = []
+    for ch in chunks:
+        prompt = (
+            "You are a precise analyst. Summarize the following transcript chunk "
+            "into crisp bullet points with only the essential facts and topics. "
+            "Avoid hallucinations. If timestamps appear, keep them.\n\n"
+            f"Transcript chunk:\n{ch}"
+        )
+        resp = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": temperature,
+                "max_output_tokens": max_tokens,
+            },
+        )
+        mapped.append((resp.text or "").strip())
+
+    joined = "\n\n".join(mapped)
+    final_prompt = (
         "You are a helpful assistant. Merge the bullet-point summaries into a final result.\n"
         f"Output style: {'bullet points' if style=='bullets' else 'short narrative paragraphs'}.\n"
         f"Length: {length}.\n\n"
@@ -48,27 +74,13 @@ def summarize_transcript(transcript: str, length: str = "medium", style: str = "
         "- Detailed summary\n"
         "- Key takeaways\n"
         "- Optional action items if applicable\n\n"
-        "Chunk summaries:\n{bullets}\n\nFinal summary:"
+        f"Chunk summaries:\n{joined}\n\nFinal summary:"
     )
-
-    # For shorter transcripts, do single-shot
-    if len(transcript) < 8000:
-        single_prompt = PromptTemplate.from_template(
-            "Summarize the following transcript. Style: "
-            f"{'bullets' if style=='bullets' else 'narrative'}, Length: {length}. "
-            "Include Executive summary, Detailed summary, Key takeaways, and optional Action items.\n\n"
-            "{text}"
-        )
-        resp = llm.invoke(single_prompt.format(text=transcript))
-        return resp.content.strip()
-
-    # Map-reduce for longer inputs
-    chunks = chunk_text(transcript, 8000)
-    mapped = []
-    for ch in chunks:
-        resp = llm.invoke(map_prompt.format(chunk=ch))
-        mapped.append(resp.content.strip())
-
-    joined = "\n\n".join(mapped)
-    final_resp = llm.invoke(reduce_prompt.format(bullets=joined))
-    return final_resp.content.strip()
+    final_resp = model.generate_content(
+        final_prompt,
+        generation_config={
+            "temperature": temperature,
+            "max_output_tokens": max_tokens,
+        },
+    )
+    return (final_resp.text or "").strip()

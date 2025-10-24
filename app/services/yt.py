@@ -1,5 +1,6 @@
 import os
 import re
+from glob import glob
 from yt_dlp import YoutubeDL
 
 SAFE = re.compile(r'[^A-Za-z0-9._-]+')
@@ -12,7 +13,8 @@ def download_audio(url: str):
 
     ydl_opts = {
         "format": "bestaudio/best",
-        "outtmpl": os.path.join("downloads", "%(title).200B.%(ext)s"),
+        # Use stable video ID to avoid mismatches between our computed path and yt-dlp's sanitization
+        "outtmpl": os.path.join("downloads", "%(id)s.%(ext)s"),
         "noprogress": True,
         "quiet": True,
         "postprocessors": [
@@ -23,8 +25,14 @@ def download_audio(url: str):
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         title = info.get("title") or "audio"
-        ext = "m4a"
-        filename = os.path.join("downloads", f"{sanitize(title)}.{ext}")
+        filename = os.path.join("downloads", f"{info.get('id')}.m4a")
+        if not os.path.exists(filename):
+            base = os.path.join("downloads", f"{info.get('id')}")
+            candidates = sorted(glob(base + ".*"))
+            for c in candidates:
+                if os.path.isfile(c) and not c.endswith(".part"):
+                    filename = c
+                    break
         return filename, {
             "title": title,
             "id": info.get("id"),

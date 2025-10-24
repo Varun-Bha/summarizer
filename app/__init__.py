@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 def create_app():
     load_dotenv()
     app = Flask(__name__)
-    app.config['MAX_CONTENT_LENGTH'] = 512 * 1024 * 1024  # 512MB safeguard
+    app.config['MAX_CONTENT_LENGTH'] = 512 * 1024 * 1024  
 
     from .routes import bp as routes_bp
     app.register_blueprint(routes_bp)
